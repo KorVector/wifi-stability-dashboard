@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>기숙사 Wi-Fi 안정화 분석</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Network · Weather · AP Planning</p>
+        <h1>기숙사 Wi-Fi 안정화 분석</h1>
+        <p class="lead">
+          엑셀의 실제 분석값을 기반으로 비·시간대가 네트워크 품질에 미치는 영향을 확인하고,
+          웹에서 직접 측정한 결과를 누적해 AP 설치 후보를 좁힙니다.
+        </p>
+      </div>
+      <div class="header-actions">
+        <button class="button ghost" id="exportButton" type="button">측정 JSON 내보내기</button>
+        <button class="button solid" id="runTestButton" type="button">지금 측정</button>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <section class="notice">
+        <strong>데이터 사용 기준</strong>
+        <span id="sourceNote">데이터를 불러오는 중입니다.</span>
+      </section>
+
+      <section class="control-panel" aria-label="분석 조건">
+        <div class="field">
+          <label for="regionSelect">공개 데이터 지역</label>
+          <select id="regionSelect"></select>
+        </div>
+        <div class="field">
+          <label for="timeSelect">시간대</label>
+          <select id="timeSelect"></select>
+        </div>
+        <div class="field">
+          <label for="dormSelect">기숙사</label>
+          <select id="dormSelect"></select>
+        </div>
+        <div class="field">
+          <label for="locationInput">측정 위치</label>
+          <input id="locationInput" type="text" value="3층 동쪽 복도" />
+        </div>
+        <div class="field">
+          <label for="activeUsersInput">현재 체감 접속 인원</label>
+          <input id="activeUsersInput" type="number" min="1" value="20" />
+        </div>
+        <div class="field">
+          <label for="rainInput">현재 강수량(mm/h)</label>
+          <input id="rainInput" type="number" min="0" step="0.1" value="0" />
+        </div>
+      </section>
+
+      <section class="metric-grid" aria-label="핵심 지표">
+        <article class="metric-card">
+          <span class="metric-label">전체 분석 데이터</span>
+          <strong id="fullRows">-</strong>
+          <small>엑셀 요약 기준 관측 수</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">강수 시 다운로드 변화</span>
+          <strong id="rainDrop">-</strong>
+          <small id="rainDropDetail">지역별 강수/건조 중앙값 비교</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">안정 목표 RTT</span>
+          <strong id="rttTarget">-</strong>
+          <small>표본 불량 연결 기준으로 산출</small>
+        </article>
+        <article class="metric-card status-card" id="measurementStatusCard">
+          <span class="metric-label">최근 실측 상태</span>
+          <strong id="latestStatus">미측정</strong>
+          <small id="latestStatusDetail">웹에서 측정을 실행하면 저장됩니다.</small>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Rain effect</p>
+              <h2>강수 여부에 따른 품질 변화</h2>
+            </div>
+            <span class="pill">엑셀 실제 요약값</span>
+          </div>
+          <canvas id="rainChart" width="880" height="330" aria-label="강수 여부 비교 그래프"></canvas>
+          <div class="insight-list" id="rainInsights"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Time effect</p>
+              <h2>시간대별 혼잡도</h2>
+            </div>
+            <span class="pill" id="selectedRegionLabel">-</span>
+          </div>
+          <canvas id="timeChart" width="620" height="330" aria-label="시간대별 그래프"></canvas>
+          <div class="insight-list" id="timeInsights"></div>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Stability standard</p>
+              <h2>안정화 기준</h2>
+            </div>
+          </div>
+          <div class="threshold-grid" id="thresholdGrid"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Conclusion</p>
+              <h2>데이터 기반 결론</h2>
+            </div>
+          </div>
+          <div class="insight-list" id="conclusionList"></div>
+        </article>
+      </section>
+
+      <section class="content-grid ap-section">
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">AP plan</p>
+              <h2>기숙사별 AP 권장 수량</h2>
+            </div>
+            <span class="pill" id="apPlanLabel">-</span>
+          </div>
+          <div class="ap-summary" id="apSummary"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>기숙사</th>
+                  <th>인원</th>
+                  <th>권장 AP</th>
+                  <th>추가 설치</th>
+                  <th>AP당 인원</th>
+                  <th>설치 요약</th>
+                </tr>
+              </thead>
+              <tbody id="apTableBody"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Placement</p>
+              <h2>설치 위치 원칙</h2>
+            </div>
+          </div>
+          <div class="insight-list" id="placementList"></div>
+        </article>
+      </section>
+
+      <section class="measurement-grid">
+        <article class="panel measurement-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Live measurement</p>
+              <h2>웹에서 바로 트래픽 측정</h2>
+            </div>
+            <span class="pill" id="testProgress">대기</span>
+          </div>
+          <div class="measurement-result" id="measurementResult">
+            아직 측정값이 없습니다. 배포된 웹에서 실행하면 현재 위치의 접속 품질을 저장합니다.
+          </div>
+          <div class="button-row">
+            <button class="button solid" id="runTestButtonBottom" type="button">측정 시작</button>
+            <button class="button ghost" id="clearButton" type="button">저장 데이터 삭제</button>
+          </div>
+          <p class="help-text">
+            브라우저 보안상 내부 공유기 ping, RSSI는 직접 읽을 수 없습니다. 이 측정은 배포된 웹 서버까지의 HTTP 지연, 지터, 실패율, 다운로드 속도를 기록합니다.
+          </p>
+          <div class="remote-box">
+            <div class="field">
+              <label for="remoteUrlInput">Supabase URL</label>
+              <input id="remoteUrlInput" type="text" placeholder="https://xxxx.supabase.co" />
+            </div>
+            <div class="field">
+              <label for="remoteKeyInput">Supabase anon key</label>
+              <input id="remoteKeyInput" type="text" placeholder="공개 anon key" />
+            </div>
+            <div class="button-row">
+              <button class="button ghost" id="saveRemoteButton" type="button">원격 저장 설정</button>
+              <button class="button ghost" id="syncRemoteButton" type="button">원격 기록 불러오기</button>
+            </div>
+            <p class="help-text" id="remoteStatus">원격 DB 설정이 없으면 이 브라우저에만 저장됩니다.</p>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Measured zones</p>
+              <h2>실측 기반 위험 위치</h2>
+            </div>
+            <span class="pill" id="measurementCount">0건</span>
+          </div>
+          <div class="insight-list" id="zoneRanking"></div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Saved records</p>
+            <h2>최근 측정 기록</h2>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>시간</th>
+                <th>기숙사</th>
+                <th>위치</th>
+                <th>HTTP 지연</th>
+                <th>지터</th>
+                <th>실패율</th>
+                <th>다운로드</th>
+                <th>판정</th>
+              </tr>
+            </thead>
+            <tbody id="measurementTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="./analysis-data.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
