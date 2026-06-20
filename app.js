@@ -89,6 +89,120 @@ function stdev(values) {
   return Math.sqrt(variance);
 }
 
+function initNetworkBackdrop() {
+  const canvas = document.querySelector("#networkBackdrop");
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let width = 0;
+  let height = 0;
+  let emitters = [];
+  let packets = [];
+  let animationId = 0;
+
+  const createSignalField = () => {
+    emitters = [
+      { x: width * 0.28, y: height * 0.36, radius: 88, delay: 0 },
+      { x: width * 0.62, y: height * 0.48, radius: 112, delay: 0.33 },
+      { x: width * 0.82, y: height * 0.3, radius: 78, delay: 0.66 },
+    ];
+
+    packets = Array.from({ length: 18 }, (_, index) => ({
+      y: height * (0.16 + ((index * 0.047) % 0.66)),
+      speed: 0.001 + Math.random() * 0.0016,
+      phase: Math.random(),
+      length: 34 + Math.random() * 54,
+    }));
+  };
+
+  const resize = () => {
+    const rect = canvas.getBoundingClientRect();
+    const scale = window.devicePixelRatio || 1;
+    width = Math.max(320, rect.width);
+    height = Math.max(260, rect.height);
+    canvas.width = Math.floor(width * scale);
+    canvas.height = Math.floor(height * scale);
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    createSignalField();
+  };
+
+  const draw = (time = 0) => {
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    emitters.forEach((emitter) => {
+      const pulse = (time * 0.00028 + emitter.delay) % 1;
+      for (let ring = 0; ring < 4; ring += 1) {
+        const ringProgress = (pulse + ring * 0.22) % 1;
+        const radius = emitter.radius * (0.28 + ringProgress * 1.45);
+        const alpha = Math.max(0, 0.24 - ringProgress * 0.22);
+        ctx.strokeStyle = `rgba(94, 178, 255, ${alpha})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(emitter.x, emitter.y, radius, -Math.PI * 0.82, Math.PI * 0.82);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = "rgba(117, 218, 255, 0.9)";
+      ctx.beginPath();
+      ctx.arc(emitter.x, emitter.y, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    packets.forEach((packet, index) => {
+      const progress = (packet.phase + time * packet.speed) % 1;
+      const x = width * (0.1 + progress * 0.86);
+      const wave = Math.sin(progress * Math.PI * 2 + index) * 18;
+      const y = packet.y + wave;
+      const gradient = ctx.createLinearGradient(x - packet.length, y, x + packet.length, y);
+      gradient.addColorStop(0, "rgba(90, 167, 255, 0)");
+      gradient.addColorStop(0.5, "rgba(120, 221, 255, 0.35)");
+      gradient.addColorStop(1, "rgba(90, 167, 255, 0)");
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x - packet.length, y);
+      ctx.lineTo(x + packet.length, y);
+      ctx.stroke();
+    });
+
+    for (let lane = 0; lane < 4; lane += 1) {
+      const baseY = height * (0.18 + lane * 0.18);
+      ctx.strokeStyle = `rgba(110, 231, 255, ${0.08 - lane * 0.01})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = width * 0.06; x <= width * 0.94; x += 10) {
+        const y = baseY + Math.sin(x * 0.018 + time * 0.0012 + lane) * (18 + lane * 4);
+        if (x === width * 0.06) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    const scanX = width * (0.08 + ((time * 0.00018) % 1) * 0.84);
+    const scanGradient = ctx.createLinearGradient(scanX - 80, 0, scanX + 80, 0);
+    scanGradient.addColorStop(0, "rgba(90, 167, 255, 0)");
+    scanGradient.addColorStop(0.5, "rgba(110, 231, 255, 0.12)");
+    scanGradient.addColorStop(1, "rgba(90, 167, 255, 0)");
+    ctx.fillStyle = scanGradient;
+    ctx.fillRect(scanX - 80, height * 0.1, 160, height * 0.72);
+    ctx.restore();
+
+    if (!reducedMotion) animationId = requestAnimationFrame(draw);
+  };
+
+  resize();
+  draw();
+  window.addEventListener("resize", () => {
+    cancelAnimationFrame(animationId);
+    resize();
+    draw();
+  });
+}
+
 function currentRegion() {
   return els.regionSelect.value || DATA.source.regions[0];
 }
@@ -593,7 +707,7 @@ function drawPredictionChart(rows) {
   drawGrid(ctx, padding, plotW, plotH, maxRisk, "점");
 
   if (!rows.length) {
-    ctx.fillStyle = "#647076";
+    ctx.fillStyle = "#8796ac";
     ctx.font = "14px Segoe UI, sans-serif";
     ctx.fillText("DB 측정 기록이 필요합니다.", padding.left + 12, padding.top + 40);
     return;
@@ -604,12 +718,12 @@ function drawPredictionChart(rows) {
     const x = padding.left + (plotW / rows.length) * index + (plotW / rows.length - barW) / 2;
     const barH = (row.avgRisk / maxRisk) * plotH;
     const y = padding.top + plotH - barH;
-    ctx.fillStyle = row.avgRisk < 25 ? "#2f7d4a" : row.avgRisk < 55 ? "#b66b08" : "#b93d32";
+    ctx.fillStyle = row.avgRisk < 25 ? "#58d68d" : row.avgRisk < 55 ? "#f7ba4d" : "#ff6b66";
     ctx.fillRect(x, y, barW, barH);
-    ctx.fillStyle = "#172126";
+    ctx.fillStyle = "#eef6ff";
     ctx.font = "700 12px Segoe UI, sans-serif";
     ctx.fillText(`${fmt(row.avgRisk, 0)}`, x + 4, y - 6);
-    ctx.fillStyle = "#647076";
+    ctx.fillStyle = "#9fb0c6";
     ctx.font = "12px Segoe UI, sans-serif";
     ctx.fillText(row.timeBand.split(" ")[0], x + 2, height - 22);
     ctx.fillText(`${fmt(row.count, 0)}건`, x + 2, height - 6);
@@ -654,12 +768,12 @@ function drawRainChart() {
     const x = padding.left + plotW * (index + 0.5) / rows.length - barW / 2;
     const barH = (row["다운로드 중앙값 (Mbps)"] / maxDownload) * plotH;
     const y = padding.top + plotH - barH;
-    ctx.fillStyle = row["날씨"] === "강수" ? "#2457a6" : "#0f766e";
+    ctx.fillStyle = row["날씨"] === "강수" ? "#4f8cff" : "#6ee7ff";
     ctx.fillRect(x, y, barW, barH);
-    ctx.fillStyle = "#172126";
+    ctx.fillStyle = "#eef6ff";
     ctx.font = "700 13px Segoe UI, sans-serif";
     ctx.fillText(`${fmt(row["다운로드 중앙값 (Mbps)"])}Mbps`, x - 2, y - 8);
-    ctx.fillStyle = "#647076";
+    ctx.fillStyle = "#9fb0c6";
     ctx.font = "12px Segoe UI, sans-serif";
     ctx.fillText(row["날씨"], x + barW / 2 - 12, height - 18);
     ctx.fillText(`불량 ${pct(row["불량 연결 비율 (%)"])}`, x - 8, height - 4);
@@ -681,12 +795,12 @@ function drawTimeChart() {
     const barH = (row["다운로드 중앙값 (Mbps)"] / maxDownload) * plotH;
     const y = padding.top + plotH - barH;
     const selected = row["시간대"] === currentTimeBand();
-    ctx.fillStyle = selected ? "#b93d32" : "#0f766e";
+    ctx.fillStyle = selected ? "#ff6b66" : "#6ee7ff";
     ctx.fillRect(x, y, barW, barH);
-    ctx.fillStyle = "#172126";
+    ctx.fillStyle = "#eef6ff";
     ctx.font = "700 12px Segoe UI, sans-serif";
     ctx.fillText(fmt(row["다운로드 중앙값 (Mbps)"], 0), x + 2, y - 6);
-    ctx.fillStyle = "#647076";
+    ctx.fillStyle = "#9fb0c6";
     ctx.font = "12px Segoe UI, sans-serif";
     const label = row["시간대"].split(" ")[0];
     ctx.fillText(label, x + 2, height - 22);
@@ -695,10 +809,10 @@ function drawTimeChart() {
 }
 
 function drawGrid(ctx, padding, plotW, plotH, maxValue, unit) {
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = "#07101d";
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  ctx.strokeStyle = "#dbe2e7";
-  ctx.fillStyle = "#647076";
+  ctx.strokeStyle = "#20354f";
+  ctx.fillStyle = "#9fb0c6";
   ctx.font = "12px Segoe UI, sans-serif";
   [0, 0.25, 0.5, 0.75, 1].forEach((ratio) => {
     const value = maxValue * ratio;
@@ -982,6 +1096,7 @@ function renderAll() {
   drawCharts();
 }
 
+initNetworkBackdrop();
 initControls();
 initRemoteConfig();
 renderAll();
