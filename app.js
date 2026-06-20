@@ -558,7 +558,10 @@ async function runMeasurement() {
 
 async function saveRemoteMeasurement(row) {
   const config = loadRemoteConfig();
-  if (!config.url || !config.anonKey) return false;
+  if (!config.url || !config.anonKey) {
+    els.remoteStatus.textContent = "Supabase URL 또는 publishable key가 비어 있어 로컬에만 저장했습니다.";
+    return false;
+  }
 
   try {
     const response = await fetch(`${config.url}/rest/v1/wifi_measurements`, {
@@ -571,11 +574,14 @@ async function saveRemoteMeasurement(row) {
       },
       body: JSON.stringify(toRemoteRow(row)),
     });
-    if (!response.ok) throw new Error(`Supabase insert failed: ${response.status}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`${response.status} ${response.statusText}: ${errorText || "no response body"}`);
+    }
     els.remoteStatus.textContent = "방금 측정값을 Supabase에도 저장했습니다.";
     return true;
-  } catch {
-    els.remoteStatus.textContent = "Supabase 저장에 실패했습니다. 로컬에는 정상 저장됐습니다.";
+  } catch (error) {
+    els.remoteStatus.textContent = `Supabase 저장 실패: ${error.message}. 로컬에는 정상 저장됐습니다.`;
     return false;
   }
 }
