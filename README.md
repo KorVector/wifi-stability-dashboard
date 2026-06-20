@@ -94,10 +94,4 @@ Netlify에서만 설정합니다.
 GEMINI_API_KEY = 복사한 Gemini API key
 ```
 
-선택 사항으로 모델을 바꾸고 싶으면 추가합니다.
-
-```text
-GEMINI_MODEL = gemini-2.5-flash
-```
-
 그다음 다시 deploy하면 웹의 `AI 분석` 버튼이 `netlify/functions/analyze.js`를 통해 Gemini API를 호출합니다. AI에게 전달되는 값은 Supabase에 저장된 측정 튜플과 안정화 기준뿐입니다.
