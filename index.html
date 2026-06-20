@@ -212,6 +212,56 @@
         </article>
       </section>
 
+      <section class="prediction-grid">
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">DB based model</p>
+              <h2>DB 측정 기반 사용 추천</h2>
+            </div>
+            <span class="pill" id="predictionModeLabel">Supabase 튜플 기반</span>
+          </div>
+          <div class="prediction-controls">
+            <div class="field">
+              <label for="predictionLocationSelect">측정 위치</label>
+              <select id="predictionLocationSelect"></select>
+            </div>
+            <div class="field">
+              <label for="predictionWeatherSelect">강수 조건</label>
+              <select id="predictionWeatherSelect"></select>
+            </div>
+          </div>
+          <canvas id="predictionChart" width="880" height="320" aria-label="DB 측정 기반 시간대별 위험도 그래프"></canvas>
+          <div class="insight-list" id="predictionSummary"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">AP priority</p>
+              <h2>DB 기반 AP 우선 후보</h2>
+            </div>
+            <span class="pill" id="scenarioCount">0개 시나리오</span>
+          </div>
+          <div class="insight-list" id="predictionApPriority"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>시간대</th>
+                  <th>강수 조건</th>
+                  <th>평균 위험도</th>
+                  <th>평균 지연</th>
+                  <th>평균 다운로드</th>
+                  <th>추천</th>
+                </tr>
+              </thead>
+              <tbody id="predictionTableBody"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
       <section class="panel">
         <div class="panel-heading">
           <div>

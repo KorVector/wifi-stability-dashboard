@@ -44,6 +44,14 @@ const els = {
   saveRemoteButton: $("#saveRemoteButton"),
   syncRemoteButton: $("#syncRemoteButton"),
   remoteStatus: $("#remoteStatus"),
+  predictionLocationSelect: $("#predictionLocationSelect"),
+  predictionWeatherSelect: $("#predictionWeatherSelect"),
+  predictionModeLabel: $("#predictionModeLabel"),
+  predictionChart: $("#predictionChart"),
+  predictionSummary: $("#predictionSummary"),
+  predictionApPriority: $("#predictionApPriority"),
+  predictionTableBody: $("#predictionTableBody"),
+  scenarioCount: $("#scenarioCount"),
 };
 
 function fmt(value, digits = 1) {
@@ -135,12 +143,21 @@ function loadRemoteConfig() {
 }
 
 function saveRemoteConfig() {
+  const rawUrl = els.remoteUrlInput.value.trim();
   const config = {
-    url: els.remoteUrlInput.value.trim().replace(/\/$/, ""),
+    url: normalizeSupabaseUrl(rawUrl),
     anonKey: els.remoteKeyInput.value.trim(),
   };
+  els.remoteUrlInput.value = config.url;
   localStorage.setItem(REMOTE_CONFIG_KEY, JSON.stringify(config));
   els.remoteStatus.textContent = config.url && config.anonKey ? "원격 DB 설정을 저장했습니다. 다음 측정부터 Supabase에도 저장합니다." : "원격 DB 설정이 비어 있어 로컬 저장만 사용합니다.";
+}
+
+function normalizeSupabaseUrl(url) {
+  return url
+    .replace(/\/+$/, "")
+    .replace(/\/rest\/v1\/?$/i, "")
+    .replace(/\/rest\/v1\/.*$/i, "");
 }
 
 function initRemoteConfig() {
@@ -363,6 +380,7 @@ function renderMeasurements() {
 
   renderZoneRanking(measurements);
   renderLatestMeasurement();
+  renderDbPredictionModel();
 }
 
 function renderZoneRanking(measurements) {
@@ -395,6 +413,203 @@ function renderZoneRanking(measurements) {
       return insight(title, `측정 ${fmt(zone.count, 0)}건, 평균 위험도 ${fmt(zone.avgScore, 0)}/100, 평균 HTTP 지연 ${fmt(zone.avgLatency)}ms, 평균 다운로드 ${fmt(zone.avgDownload)}Mbps입니다.`);
     })
     .join("");
+}
+
+function dbBackedMeasurements() {
+  return loadMeasurements().filter((row) => row.remoteSaved === true);
+}
+
+function rainBucket(row) {
+  const rain = Number(row.rainMm || 0);
+  if (rain <= 0) return "건조";
+  if (rain < 3) return "약한 강수";
+  if (rain < 10) return "보통 강수";
+  return "강한 강수";
+}
+
+function measurementTimeBand(row) {
+  return row.timeBandReference || timeBandFromDate(row.measuredAt);
+}
+
+function timeBandFromDate(value) {
+  const hour = new Date(value).getHours();
+  if (hour < 6) return "심야 00-05";
+  if (hour < 12) return "오전 06-11";
+  if (hour < 18) return "낮 12-17";
+  return "저녁 18-23";
+}
+
+function groupedDbRows() {
+  const rows = dbBackedMeasurements();
+  const grouped = new Map();
+  rows.forEach((row) => {
+    const key = `${row.dorm} ${row.location}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  });
+  return grouped;
+}
+
+function refreshPredictionOptions(rows) {
+  const currentLocation = els.predictionLocationSelect.value;
+  const currentWeather = els.predictionWeatherSelect.value;
+  const locations = [...new Set(rows.map((row) => `${row.dorm} ${row.location}`))].sort();
+  const buckets = [...new Set(rows.map(rainBucket))].sort();
+
+  els.predictionLocationSelect.innerHTML = locations.length
+    ? locations.map((location) => `<option value="${location}">${location}</option>`).join("")
+    : `<option value="">DB 측정 기록 없음</option>`;
+  if (locations.includes(currentLocation)) els.predictionLocationSelect.value = currentLocation;
+
+  const weatherOptions = ["전체", ...buckets];
+  els.predictionWeatherSelect.innerHTML = weatherOptions.map((bucket) => `<option value="${bucket}">${bucket}</option>`).join("");
+  if (weatherOptions.includes(currentWeather)) els.predictionWeatherSelect.value = currentWeather;
+}
+
+function renderDbPredictionModel() {
+  const rows = dbBackedMeasurements();
+  refreshPredictionOptions(rows);
+  els.scenarioCount.textContent = `${fmt(rows.length, 0)}개 DB 튜플`;
+  els.predictionModeLabel.textContent = "Supabase 튜플 기반";
+
+  if (!rows.length) {
+    els.predictionSummary.innerHTML = insight("DB 측정 필요", "원격 저장에 성공한 Supabase 튜플이 아직 없습니다. Supabase URL을 저장하고 측정한 뒤, Table Editor에 행이 생겼는지 확인해 주세요.");
+    els.predictionApPriority.innerHTML = insight("AP 후보 대기", "DB에 저장된 위치별 측정값이 있어야 AP 우선 후보를 계산합니다.");
+    els.predictionTableBody.innerHTML = `<tr><td colspan="6">DB 기반 측정 기록이 없습니다.</td></tr>`;
+    drawPredictionChart([]);
+    return;
+  }
+
+  const selectedLocation = els.predictionLocationSelect.value || `${rows[0].dorm} ${rows[0].location}`;
+  const selectedWeather = els.predictionWeatherSelect.value || "전체";
+  const filtered = rows.filter((row) => {
+    const locationKey = `${row.dorm} ${row.location}`;
+    const weatherMatches = selectedWeather === "전체" || rainBucket(row) === selectedWeather;
+    return locationKey === selectedLocation && weatherMatches;
+  });
+
+  const bandSummary = summarizeByTimeBand(filtered);
+  renderPredictionSummary(selectedLocation, selectedWeather, bandSummary, filtered);
+  renderPredictionTable(bandSummary);
+  renderPredictionApPriority(rows);
+  drawPredictionChart(bandSummary);
+}
+
+function summarizeByTimeBand(rows) {
+  const grouped = new Map();
+  rows.forEach((row) => {
+    const band = measurementTimeBand(row);
+    if (!grouped.has(band)) grouped.set(band, []);
+    grouped.get(band).push(row);
+  });
+
+  const order = ["심야 00-05", "오전 06-11", "낮 12-17", "저녁 18-23"];
+  return [...grouped.entries()]
+    .map(([timeBand, items]) => ({
+      timeBand,
+      count: items.length,
+      avgRisk: average(items.map((row) => row.riskScore)),
+      avgLatency: average(items.map((row) => row.latencyMs)),
+      avgDownload: average(items.map((row) => row.downloadMbps)),
+      avgFailure: average(items.map((row) => row.failurePct)),
+      weatherBuckets: [...new Set(items.map(rainBucket))].join(", "),
+    }))
+    .sort((a, b) => order.indexOf(a.timeBand) - order.indexOf(b.timeBand));
+}
+
+function renderPredictionSummary(location, weather, bandSummary, rows) {
+  if (!rows.length) {
+    els.predictionSummary.innerHTML = insight("조건에 맞는 DB 기록 없음", `${location}, ${weather} 조건의 Supabase 측정 튜플이 없습니다. 해당 위치와 조건으로 측정을 추가해야 추천이 가능합니다.`);
+    return;
+  }
+
+  const best = [...bandSummary].sort((a, b) => a.avgRisk - b.avgRisk || b.avgDownload - a.avgDownload)[0];
+  const worst = [...bandSummary].sort((a, b) => b.avgRisk - a.avgRisk || a.avgDownload - b.avgDownload)[0];
+  const enoughBands = bandSummary.length >= 2;
+
+  els.predictionSummary.innerHTML = [
+    ["추천 시간대", `${location}에서 현재 DB 기준 가장 효율적인 시간대는 ${best.timeBand}입니다. 평균 위험도 ${fmt(best.avgRisk, 0)}/100, 평균 다운로드 ${fmt(best.avgDownload)}Mbps, 평균 지연 ${fmt(best.avgLatency)}ms입니다.`],
+    ["피해야 할 시간대", `${worst.timeBand}은 평균 위험도 ${fmt(worst.avgRisk, 0)}/100으로 가장 높게 나타났습니다.`],
+    ["데이터 충분성", enoughBands ? `서로 다른 ${bandSummary.length}개 시간대의 DB 튜플을 비교했습니다.` : "현재는 한 시간대 기록만 있어 시간대 비교가 제한됩니다. 다른 시간대에서 추가 측정하면 추천 정확도가 올라갑니다."],
+  ]
+    .map(([title, body]) => insight(title, body))
+    .join("");
+}
+
+function renderPredictionTable(rows) {
+  els.predictionTableBody.innerHTML = rows.length
+    ? rows
+        .map((row) => {
+          const recommendation = row.avgRisk < 25 ? "사용 추천" : row.avgRisk < 55 ? "주의" : "회피 권장";
+          return `
+            <tr>
+              <td>${row.timeBand}</td>
+              <td>${row.weatherBuckets || "-"}</td>
+              <td>${fmt(row.avgRisk, 0)}/100</td>
+              <td>${fmt(row.avgLatency)}ms</td>
+              <td>${fmt(row.avgDownload)}Mbps</td>
+              <td>${recommendation} · ${fmt(row.count, 0)}건</td>
+            </tr>
+          `;
+        })
+        .join("")
+    : `<tr><td colspan="6">선택 조건에 맞는 DB 측정 기록이 없습니다.</td></tr>`;
+}
+
+function renderPredictionApPriority(rows) {
+  const grouped = groupedDbRows();
+  const ranked = [...grouped.entries()]
+    .map(([location, items]) => ({
+      location,
+      count: items.length,
+      avgRisk: average(items.map((row) => row.riskScore)),
+      avgLatency: average(items.map((row) => row.latencyMs)),
+      avgDownload: average(items.map((row) => row.downloadMbps)),
+      rainyCount: items.filter((row) => Number(row.rainMm || 0) > 0).length,
+    }))
+    .sort((a, b) => b.avgRisk - a.avgRisk || b.avgLatency - a.avgLatency)
+    .slice(0, 5);
+
+  els.predictionApPriority.innerHTML = ranked
+    .map((item, index) => {
+      const title = index === 0 ? `1순위 AP 후보: ${item.location}` : `${index + 1}순위: ${item.location}`;
+      return insight(title, `DB 튜플 ${fmt(item.count, 0)}건, 평균 위험도 ${fmt(item.avgRisk, 0)}/100, 평균 지연 ${fmt(item.avgLatency)}ms, 평균 다운로드 ${fmt(item.avgDownload)}Mbps입니다. 강수 기록은 ${fmt(item.rainyCount, 0)}건입니다.`);
+    })
+    .join("");
+}
+
+function drawPredictionChart(rows) {
+  const canvas = els.predictionChart;
+  if (!canvas) return;
+  const { ctx, width, height } = setupCanvas(canvas, 300);
+  const padding = { top: 28, right: 20, bottom: 48, left: 52 };
+  const plotW = width - padding.left - padding.right;
+  const plotH = height - padding.top - padding.bottom;
+  const maxRisk = 100;
+  drawGrid(ctx, padding, plotW, plotH, maxRisk, "점");
+
+  if (!rows.length) {
+    ctx.fillStyle = "#647076";
+    ctx.font = "14px Segoe UI, sans-serif";
+    ctx.fillText("DB 측정 기록이 필요합니다.", padding.left + 12, padding.top + 40);
+    return;
+  }
+
+  rows.forEach((row, index) => {
+    const barW = Math.max(42, Math.min(82, plotW / rows.length - 24));
+    const x = padding.left + (plotW / rows.length) * index + (plotW / rows.length - barW) / 2;
+    const barH = (row.avgRisk / maxRisk) * plotH;
+    const y = padding.top + plotH - barH;
+    ctx.fillStyle = row.avgRisk < 25 ? "#2f7d4a" : row.avgRisk < 55 ? "#b66b08" : "#b93d32";
+    ctx.fillRect(x, y, barW, barH);
+    ctx.fillStyle = "#172126";
+    ctx.font = "700 12px Segoe UI, sans-serif";
+    ctx.fillText(`${fmt(row.avgRisk, 0)}`, x + 4, y - 6);
+    ctx.fillStyle = "#647076";
+    ctx.font = "12px Segoe UI, sans-serif";
+    ctx.fillText(row.timeBand.split(" ")[0], x + 2, height - 22);
+    ctx.fillText(`${fmt(row.count, 0)}건`, x + 2, height - 6);
+  });
 }
 
 function insight(title, body) {
@@ -738,4 +953,9 @@ els.exportButton.addEventListener("click", exportMeasurements);
 els.clearButton.addEventListener("click", clearMeasurements);
 els.saveRemoteButton.addEventListener("click", saveRemoteConfig);
 els.syncRemoteButton.addEventListener("click", syncRemoteMeasurements);
-window.addEventListener("resize", drawCharts);
+els.predictionLocationSelect.addEventListener("change", renderDbPredictionModel);
+els.predictionWeatherSelect.addEventListener("change", renderDbPredictionModel);
+window.addEventListener("resize", () => {
+  drawCharts();
+  renderDbPredictionModel();
+});

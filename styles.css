@@ -182,7 +182,8 @@ input[type="number"] {
 
 .metric-grid,
 .content-grid,
-.measurement-grid {
+.measurement-grid,
+.prediction-grid {
   display: grid;
   gap: 14px;
   margin-top: 14px;
@@ -198,6 +199,10 @@ input[type="number"] {
 
 .measurement-grid {
   grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+}
+
+.prediction-grid {
+  grid-template-columns: minmax(0, 1.1fr) minmax(380px, 0.9fr);
 }
 
 .ap-section {
@@ -361,6 +366,13 @@ td {
   background: #f8fafc;
 }
 
+.prediction-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
 .help-text {
   margin-bottom: 0;
   font-size: 0.88rem;
@@ -377,7 +389,8 @@ td {
   }
 
   .content-grid,
-  .measurement-grid {
+  .measurement-grid,
+  .prediction-grid {
     grid-template-columns: 1fr;
   }
 
@@ -396,7 +409,8 @@ td {
 
   .control-panel,
   .metric-grid,
-  .threshold-grid {
+  .threshold-grid,
+  .prediction-controls {
     grid-template-columns: 1fr;
   }
 
