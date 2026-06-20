@@ -963,7 +963,7 @@ async function runAiAnalysis() {
     els.aiResult.textContent = data.text || "AI 분석 결과가 비어 있습니다.";
     els.aiStatus.textContent = "완료";
   } catch (error) {
-    els.aiResult.textContent = `${error.message}\n\nNetlify 환경변수 OPENAI_API_KEY가 설정되어 있는지 확인해 주세요. 로컬에서 파일만 열면 서버 함수가 없어 AI 분석은 실행되지 않습니다.`;
+    els.aiResult.textContent = `${error.message}\n\nNetlify 환경변수 GEMINI_API_KEY가 설정되어 있는지 확인해 주세요. 로컬에서 파일만 열면 서버 함수가 없어 AI 분석은 실행되지 않습니다.`;
     els.aiStatus.textContent = "실패";
   } finally {
     els.aiAnalyzeButton.disabled = false;

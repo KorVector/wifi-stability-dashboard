@@ -1,5 +1,3 @@
-const OPENAI_API_URL = "https://api.openai.com/v1/responses";
-
 function jsonResponse(body, statusCode = 200) {
   return {
     statusCode,
@@ -27,16 +25,9 @@ function compactMeasurements(rows = []) {
   }));
 }
 
-function extractText(data) {
-  if (typeof data.output_text === "string") return data.output_text;
-  const chunks = [];
-  for (const item of data.output || []) {
-    for (const content of item.content || []) {
-      if (content.type === "output_text" && content.text) chunks.push(content.text);
-      if (content.type === "text" && content.text) chunks.push(content.text);
-    }
-  }
-  return chunks.join("\n").trim();
+function extractGeminiText(data) {
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  return parts.map((part) => part.text || "").join("\n").trim();
 }
 
 exports.handler = async (event) => {
@@ -44,9 +35,9 @@ exports.handler = async (event) => {
     return jsonResponse({ error: "POST only" }, 405);
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return jsonResponse({ error: "OPENAI_API_KEY 환경변수가 설정되지 않았습니다." }, 500);
+    return jsonResponse({ error: "GEMINI_API_KEY 환경변수가 설정되지 않았습니다." }, 500);
   }
 
   let payload;
@@ -66,47 +57,50 @@ exports.handler = async (event) => {
     });
   }
 
-  const input = [
-    {
-      role: "developer",
-      content:
-        "너는 데이터 사이언스 팀 프로젝트의 네트워크 품질 분석 도우미다. 반드시 제공된 측정 데이터와 기준값만 근거로 한국어로 답한다. 데이터가 부족하면 부족하다고 말하고, 임의로 측정값을 지어내지 않는다. AP 설치 후보, 회피 시간대, 추가 측정 계획을 실무적으로 제안한다.",
-    },
-    {
-      role: "user",
-      content: JSON.stringify(
-        {
-          userQuestion: question || "현재 측정 데이터를 분석해서 AP 설치 우선순위와 사용 추천 시간대를 알려줘.",
-          stabilityThresholds: analysis.stabilityThresholds,
-          sourceSummary: analysis.sourceSummary,
-          measurements,
-        },
-        null,
-        2,
-      ),
-    },
-  ];
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const prompt = [
+    "너는 데이터 사이언스 팀 프로젝트의 네트워크 품질 분석 도우미다.",
+    "반드시 제공된 측정 데이터와 기준값만 근거로 한국어로 답한다.",
+    "데이터가 부족하면 부족하다고 말하고, 임의로 측정값을 지어내지 않는다.",
+    "AP 설치 후보, 회피 시간대, 추가 측정 계획을 실무적으로 제안한다.",
+    "",
+    JSON.stringify(
+      {
+        userQuestion: question || "현재 측정 데이터를 분석해서 AP 설치 우선순위와 사용 추천 시간대를 알려줘.",
+        stabilityThresholds: analysis.stabilityThresholds,
+        sourceSummary: analysis.sourceSummary,
+        measurements,
+      },
+      null,
+      2,
+    ),
+  ].join("\n");
 
   try {
-    const response = await fetch(OPENAI_API_URL, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-5.5",
-        input,
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
       }),
     });
 
     const data = await response.json();
     if (!response.ok) {
-      return jsonResponse({ error: data.error?.message || `OpenAI API error: ${response.status}` }, response.status);
+      return jsonResponse({ error: data.error?.message || `Gemini API error: ${response.status}` }, response.status);
     }
 
-    return jsonResponse({ text: extractText(data) || "분석 결과를 읽지 못했습니다." });
+    return jsonResponse({ text: extractGeminiText(data) || "분석 결과를 읽지 못했습니다." });
   } catch (error) {
-    return jsonResponse({ error: `AI 분석 요청 실패: ${error.message}` }, 500);
+    return jsonResponse({ error: `Gemini 분석 요청 실패: ${error.message}` }, 500);
   }
 };
