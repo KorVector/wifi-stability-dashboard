@@ -2,3 +2,11 @@
   for = "/*"
   [headers.values]
     Cache-Control = "no-store"
+
+[functions]
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/api/analyze"
+  to = "/.netlify/functions/analyze"
+  status = 200

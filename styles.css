@@ -170,7 +170,8 @@ h2 {
 
 select,
 input[type="text"],
-input[type="number"] {
+input[type="number"],
+textarea {
   width: 100%;
   min-height: 42px;
   border: 1px solid #cfd9d6;
@@ -178,6 +179,13 @@ input[type="number"] {
   background: #ffffff;
   color: var(--ink);
   padding: 0 11px;
+}
+
+textarea {
+  min-height: 94px;
+  padding: 11px;
+  line-height: 1.5;
+  resize: vertical;
 }
 
 .metric-grid,
@@ -378,6 +386,28 @@ td {
   font-size: 0.88rem;
 }
 
+.ai-panel {
+  margin-top: 14px;
+}
+
+.ai-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.ai-result {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #e1e8e4;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #344047;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 1080px) {
   .app-header {
     align-items: flex-start;
@@ -410,7 +440,8 @@ td {
   .control-panel,
   .metric-grid,
   .threshold-grid,
-  .prediction-controls {
+  .prediction-controls,
+  .ai-input-row {
     grid-template-columns: 1fr;
   }
 

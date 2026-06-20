@@ -52,6 +52,10 @@ const els = {
   predictionApPriority: $("#predictionApPriority"),
   predictionTableBody: $("#predictionTableBody"),
   scenarioCount: $("#scenarioCount"),
+  aiStatus: $("#aiStatus"),
+  aiQuestionInput: $("#aiQuestionInput"),
+  aiAnalyzeButton: $("#aiAnalyzeButton"),
+  aiResult: $("#aiResult"),
 };
 
 function fmt(value, digits = 1) {
@@ -927,6 +931,45 @@ function clearMeasurements() {
   renderMeasurements();
 }
 
+async function runAiAnalysis() {
+  const measurements = dbBackedMeasurements();
+  if (!measurements.length) {
+    els.aiResult.textContent = "AI 분석에는 Supabase에 저장된 측정 튜플이 필요합니다. 먼저 원격 저장 설정 후 측정하고, 원격 기록 불러오기를 눌러 주세요.";
+    els.aiStatus.textContent = "DB 기록 필요";
+    return;
+  }
+
+  els.aiAnalyzeButton.disabled = true;
+  els.aiStatus.textContent = "분석 중";
+  els.aiResult.textContent = "AI가 DB 측정값을 분석하는 중입니다.";
+
+  try {
+    const response = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: els.aiQuestionInput.value,
+        measurements,
+        analysis: {
+          stabilityThresholds: DATA.stability.thresholds,
+          sourceSummary: DATA.source,
+        },
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      throw new Error(data.error || `AI 분석 실패: ${response.status}`);
+    }
+    els.aiResult.textContent = data.text || "AI 분석 결과가 비어 있습니다.";
+    els.aiStatus.textContent = "완료";
+  } catch (error) {
+    els.aiResult.textContent = `${error.message}\n\nNetlify 환경변수 OPENAI_API_KEY가 설정되어 있는지 확인해 주세요. 로컬에서 파일만 열면 서버 함수가 없어 AI 분석은 실행되지 않습니다.`;
+    els.aiStatus.textContent = "실패";
+  } finally {
+    els.aiAnalyzeButton.disabled = false;
+  }
+}
+
 function renderAll() {
   renderSource();
   renderMetrics();
@@ -953,6 +996,7 @@ els.exportButton.addEventListener("click", exportMeasurements);
 els.clearButton.addEventListener("click", clearMeasurements);
 els.saveRemoteButton.addEventListener("click", saveRemoteConfig);
 els.syncRemoteButton.addEventListener("click", syncRemoteMeasurements);
+els.aiAnalyzeButton.addEventListener("click", runAiAnalysis);
 els.predictionLocationSelect.addEventListener("change", renderDbPredictionModel);
 els.predictionWeatherSelect.addEventListener("change", renderDbPredictionModel);
 window.addEventListener("resize", () => {

@@ -262,6 +262,27 @@
         </article>
       </section>
 
+      <section class="panel ai-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">AI assistant</p>
+            <h2>AI 분석 결과</h2>
+          </div>
+          <span class="pill" id="aiStatus">대기</span>
+        </div>
+        <div class="ai-input-row">
+          <textarea
+            id="aiQuestionInput"
+            rows="3"
+            placeholder="예: 지금 DB 측정값 기준으로 AP를 어디에 먼저 설치해야 하는지, 어느 시간대를 피해야 하는지 알려줘."
+          ></textarea>
+          <button class="button solid" id="aiAnalyzeButton" type="button">AI 분석</button>
+        </div>
+        <div class="ai-result" id="aiResult">
+          Supabase에 저장된 측정 튜플을 불러온 뒤 AI 분석을 실행하면 결과가 여기에 표시됩니다.
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel-heading">
           <div>
